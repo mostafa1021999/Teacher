@@ -1,0 +1,117 @@
+import 'dart:convert';
+import 'dart:math';
+import 'package:flutter/material.dart';
+import 'package:flutter_chat_ui/flutter_chat_ui.dart';
+import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
+import 'package:teacher/componants/componants.dart';
+import 'package:web_socket_client/web_socket_client.dart';
+
+class ChatPage extends StatefulWidget {
+  const ChatPage({super.key,});
+
+
+  @override
+  State<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends State<ChatPage> {
+  // final socket = WebSocket(Uri.parse('ws://localhost:8080')); // if run on Windows/Web
+  // final socket = WebSocket(Uri.parse('ws://0.tcp.ap.ngrok.io:17306')); // If use ngrok
+  final socket =
+  WebSocket(Uri.parse('ws://10.0.2.2:8080')); // If using emulator
+  final List<types.Message> _messages = [];
+  late types.User otherUser;
+  late types.User me;
+
+  @override
+  void initState() {
+    super.initState();
+    me = const types.User(id: 'Fareez', firstName: 'Fareez');
+    // Listen to messages from the server.
+    socket.messages.listen((incomingMessage) {
+      // Split the response into the JSON string and the "from" string
+      List<String> parts = incomingMessage.split(' from ');
+      String jsonString = parts[0];
+
+      // Parse the JSON string using the jsonDecode() function
+      Map<String, dynamic> data = jsonDecode(jsonString);
+
+      // Access the values from the parsed JSON object
+      String id = data['id'];
+      String msg = data['msg'];
+      String timestamp = data['timestamp'];
+
+      // if (id == otherUser.id) {
+      onMessageReceived(msg);
+      // }
+    });
+  }
+
+  String randomString() {
+    final random = Random.secure();
+    final values = List<int>.generate(16, (i) => random.nextInt(255));
+    return base64UrlEncode(values);
+  }
+
+  void onMessageReceived(String message) {
+    var newMessage = types.TextMessage(
+      author: otherUser,
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      text: message,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    _addMessage(newMessage);
+  }
+
+  void _addMessage(types.Message message) {
+    setState(() {
+      _messages.insert(0, message);
+    });
+  }
+
+  void _handleSendPressed(types.PartialText message) {
+    final textMessage = types.TextMessage(
+      author: me,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      id: randomString(),
+      text: message.text,
+    );
+
+    var payload = {
+      'id': me.id,
+      'msg': message.text,
+      'timestamp': DateTime.now().millisecondsSinceEpoch.toString(),
+    };
+
+    socket.send(json.encode(payload));
+
+    _addMessage(textMessage);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Center(child: Text(appTitle,style: fontAppName,)),elevation: 0,
+        actions: [
+          Padding(   padding: const EdgeInsets.all(10.0),
+              child:IconButton( onPressed: () { },
+                icon: const Icon(Icons.chat_outlined,size: 30),))],),
+      body: Chat(
+        messages: _messages,
+        onSendPressed: _handleSendPressed,
+        user: me,
+        theme: DefaultChatTheme(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    // Close the connection.
+    socket.close();
+    super.dispose();
+  }
+}
